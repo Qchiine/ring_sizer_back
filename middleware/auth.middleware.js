@@ -48,3 +48,29 @@ export const authenticate = async (req, res, next) => {
   }
 };
 
+// Middleware pour vérifier que l'utilisateur est un vendeur
+export const isSeller = async (req, res, next) => {
+  try {
+    // Vérifier que l'utilisateur est authentifié (authenticate doit être appelé avant)
+    if (!req.user) {
+      return res.status(401).json({ 
+        message: "Authentification requise." 
+      });
+    }
+
+    // Vérifier que l'utilisateur a le rôle "Vendeur"
+    if (req.user.role !== "Vendeur") {
+      return res.status(403).json({ 
+        message: "Accès refusé. Cette fonctionnalité est réservée aux vendeurs." 
+      });
+    }
+
+    next();
+  } catch (error) {
+    res.status(500).json({ 
+      message: "Erreur de vérification du rôle.", 
+      error: error.message 
+    });
+  }
+};
+
