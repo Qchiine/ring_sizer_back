@@ -482,4 +482,3 @@ Authorization: Bearer <jwt_token>
 8. **Carat:** Les valeurs de carat acceptées sont 18, 22 et 24
 9. **Statut des commandes:** Les statuts possibles sont: `pending`, `processing`, `shipped`, `delivered`, `cancelled`
 10. **Sécurité:** Un vendeur ne peut modifier/supprimer que ses propres produits et gérer uniquement les commandes de ses produits
-
