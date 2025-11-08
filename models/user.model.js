@@ -14,7 +14,8 @@ const userSchema = new mongoose.Schema({
   role: { type: String, enum: ["Utilisateur", "Vendeur"], default: "Utilisateur" },
   mesures: [{ type: mongoose.Schema.Types.ObjectId, ref: "Measurement" }],
   boutique: boutiqueSchema,
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
 });
 
 // Hash du mot de passe
