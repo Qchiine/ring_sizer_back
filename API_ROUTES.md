@@ -137,7 +137,8 @@ http://localhost:5000/api
   - `name` (optionnel): Recherche par nom
   - `carat` (optionnel): Filtre par carat
   - `priceMin` (optionnel): Prix minimum
-  - `priceMax` (optionnel): Prix maximum
+  - `
+  priceMax` (optionnel): Prix maximum
   - `weightMin` (optionnel): Poids minimum
   - `weightMax` (optionnel): Poids maximum
 - **Exemple:** `/api/catalog?carat=18&priceMin=100&priceMax=500`
