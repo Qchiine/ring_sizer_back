@@ -106,36 +106,4 @@ export const login = async (req, res) => {
   }
 };
 
-// Route pour récupérer le profil connecté
-export const getProfile = async (req, res) => {
-  try {
-    // L'utilisateur est disponible via req.user (ajouté par le middleware)
-    const user = await User.findById(req.user._id)
-      .select("-password")
-      .populate("mesures", "type valueMm date");
-
-    // Récupérer le profil associé
-    const profile = await Profile.findOne({ userId: user._id });
-
-    res.json({
-      user: {
-        userId: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        createdAt: user.createdAt
-      },
-      profile: profile || {
-        name: user.name,
-        email: user.email
-      },
-      mesures: user.mesures || []
-    });
-  } catch (error) {
-    res.status(500).json({ 
-      message: "Erreur lors de la récupération du profil.", 
-      error: error.message 
-    });
-  }
-};
 
