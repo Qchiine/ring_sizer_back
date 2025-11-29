@@ -331,7 +331,8 @@ http://localhost:5000/api
       "weight": 5.2,
       "price": 250,
       "stock": 10,
-      "imageUrl": "/uploads/products/product-1234567890.jpg",
+      "imageUrl": "http://localhost:5000/uploads/products/product-1234567890.jpg",
+      "imageLink": "http://localhost:5000/uploads/products/product-1234567890.jpg",
       "sellerId": {...},
       "goldPriceId": {...}
     }
@@ -478,7 +479,7 @@ Authorization: Bearer <jwt_token>
 4. **Profil:** Le profil est créé automatiquement lors de l'inscription
 5. **Rôle:** Par défaut, tous les nouveaux utilisateurs ont le rôle "Utilisateur"
 6. **Vendeur:** Pour accéder aux routes `/api/seller/*`, l'utilisateur doit avoir le rôle "Vendeur"
-7. **Upload d'images:** Les images doivent être au format jpeg, jpg, png, gif ou webp, avec une taille maximale de 5MB
+7. **Upload d'images:** Les images doivent être au format jpeg, jpg, png, gif ou webp, avec une taille maximale de 5MB. La réponse contient désormais `imageUrl` (chemin absolu) et `imageLink` pour un accès direct depuis l'app. Pour forcer un domaine spécifique, définissez la variable d'environnement `PUBLIC_BASE_URL` (ex: `https://cdn.maboutique.com`).
 8. **Carat:** Les valeurs de carat acceptées sont 18, 22 et 24
 9. **Statut des commandes:** Les statuts possibles sont: `pending`, `processing`, `shipped`, `delivered`, `cancelled`
 10. **Sécurité:** Un vendeur ne peut modifier/supprimer que ses propres produits et gérer uniquement les commandes de ses produits

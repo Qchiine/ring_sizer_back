@@ -90,13 +90,18 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
+const HOST = process.env.HOST || "0.0.0.0"; // Écouter sur toutes les interfaces réseau
 
 // Connexion à la base de données et démarrage du serveur
 connectDB()
   .then(() => {
-    app.listen(PORT, () => {
-      console.log(`🚀 Serveur sur le port ${PORT}`);
-      console.log(`📱 API disponible sur http://localhost:${PORT}`);
+    app.listen(PORT, HOST, () => {
+      console.log(`🚀 Serveur démarré sur le port ${PORT}`);
+      console.log(`📱 API disponible sur:`);
+      console.log(`   - http://localhost:${PORT}`);
+      console.log(`   - http://127.0.0.1:${PORT}`);
+      console.log(`   - http://10.0.2.2:${PORT} (pour émulateur Android)`);
+      console.log(`   - Accessible depuis le réseau local`);
     });
   })
   .catch(err => {

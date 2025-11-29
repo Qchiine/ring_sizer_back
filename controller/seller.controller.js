@@ -5,6 +5,48 @@ import Order from "../models/order.model.js";
 import GoldPrice from "../models/goldprice.model.js"; // Import pour enregistrer le modèle
 
 // ============================================
+// Utilitaires
+// ============================================
+
+const getPublicBaseUrl = () => {
+  if (!process.env.PUBLIC_BASE_URL) return null;
+  return process.env.PUBLIC_BASE_URL.replace(/\/$/, "");
+};
+
+const buildBaseUrl = req => {
+  const envBase = getPublicBaseUrl();
+  if (envBase) return envBase;
+  const host = req.get("host");
+  return `${req.protocol}://${host}`;
+};
+
+const buildRelativeImagePath = filename => `/uploads/products/${filename}`;
+
+const formatProductResponse = (productDoc, req) => {
+  if (!productDoc) return null;
+  const product = productDoc.toObject ? productDoc.toObject() : { ...productDoc };
+  if (product.imageUrl) {
+    const hasAbsoluteUrl = /^https?:\/\//i.test(product.imageUrl);
+    if (!hasAbsoluteUrl) {
+      product.imageUrl = `${buildBaseUrl(req)}${product.imageUrl}`;
+    }
+    product.imageLink = product.imageUrl;
+  } else {
+    product.imageLink = null;
+  }
+  return product;
+};
+
+const formatOrderResponse = (orderDoc, req) => {
+  if (!orderDoc) return null;
+  const order = orderDoc.toObject ? orderDoc.toObject() : { ...orderDoc };
+  if (order.productId) {
+    order.productId = formatProductResponse(order.productId, req);
+  }
+  return order;
+};
+
+// ============================================
 // GESTION DU PROFIL BOUTIQUE
 // ============================================
 
@@ -166,7 +208,7 @@ export const createProduct = async (req, res) => {
     }
 
     // Gérer l'image si elle est uploadée
-    const imageUrl = req.file ? `/uploads/products/${req.file.filename}` : null;
+    const imageUrl = req.file ? buildRelativeImagePath(req.file.filename) : null;
 
     // Créer le produit
     const product = new Product({
@@ -190,7 +232,7 @@ export const createProduct = async (req, res) => {
 
     res.status(201).json({
       message: "Produit créé avec succès",
-      product: populatedProduct
+      product: formatProductResponse(populatedProduct, req)
     });
   } catch (error) {
     res.status(500).json({
@@ -213,7 +255,7 @@ export const getMyProducts = async (req, res) => {
     res.json({
       message: "Produits récupérés avec succès",
       count: products.length,
-      products
+      products: products.map(product => formatProductResponse(product, req))
     });
   } catch (error) {
     res.status(500).json({
@@ -244,7 +286,7 @@ export const getMyProductById = async (req, res) => {
 
     res.json({
       message: "Produit récupéré avec succès",
-      product
+      product: formatProductResponse(product, req)
     });
   } catch (error) {
     if (error.name === "CastError") {
@@ -318,7 +360,7 @@ export const updateProduct = async (req, res) => {
 
     // Gérer l'upload d'une nouvelle image
     if (req.file) {
-      updateData.imageUrl = `/uploads/products/${req.file.filename}`;
+      updateData.imageUrl = buildRelativeImagePath(req.file.filename);
     }
 
     updateData.updatedAt = new Date();
@@ -334,7 +376,7 @@ export const updateProduct = async (req, res) => {
 
     res.json({
       message: "Produit mis à jour avec succès",
-      product: updatedProduct
+      product: formatProductResponse(updatedProduct, req)
     });
   } catch (error) {
     if (error.name === "CastError") {
@@ -422,7 +464,7 @@ export const updateStock = async (req, res) => {
 
     res.json({
       message: "Stock mis à jour avec succès",
-      product: updatedProduct
+      product: formatProductResponse(updatedProduct, req)
     });
   } catch (error) {
     if (error.name === "CastError") {
@@ -460,7 +502,7 @@ export const getMyOrders = async (req, res) => {
     res.json({
       message: "Commandes récupérées avec succès",
       count: orders.length,
-      orders
+      orders: orders.map(order => formatOrderResponse(order, req))
     });
   } catch (error) {
     res.status(500).json({
@@ -497,7 +539,7 @@ export const getOrderById = async (req, res) => {
 
     res.json({
       message: "Commande récupérée avec succès",
-      order
+      order: formatOrderResponse(order, req)
     });
   } catch (error) {
     if (error.name === "CastError") {
@@ -555,7 +597,7 @@ export const updateOrderStatus = async (req, res) => {
 
     res.json({
       message: "Statut de la commande mis à jour avec succès",
-      order: updatedOrder
+      order: formatOrderResponse(updatedOrder, req)
     });
   } catch (error) {
     if (error.name === "CastError") {
