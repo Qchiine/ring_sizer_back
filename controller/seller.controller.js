@@ -22,6 +22,89 @@ const buildBaseUrl = req => {
 
 const buildRelativeImagePath = filename => `/uploads/products/${filename}`;
 
+/**
+ * Nettoie et valide une URL d'image depuis le body de la requête
+ * @param {string} imageUrlFromBody - L'URL d'image brute du body
+ * @returns {string|null} - L'URL nettoyée et validée, ou null si invalide
+ */
+const cleanAndValidateImageUrl = (imageUrlFromBody) => {
+  if (!imageUrlFromBody) return null;
+  
+  let cleanedImageUrl = String(imageUrlFromBody).trim();
+  
+  // Enlever les guillemets en trop au début et à la fin
+  cleanedImageUrl = cleanedImageUrl.replace(/^["']+|["']+$/g, '');
+  
+  // Patterns de logs à filtrer (Flutter, Android, nodemon, etc.)
+  const logPatterns = [
+    'ImeTracker',
+    'Exception caught',
+    'RenderFlex overflowed',
+    'InputConnectionAdaptor',
+    'InsetsController',
+    'WindowOnBackDispatcher',
+    'AssetManager',
+    '[nodemon]',
+    'nodemon',
+    'starting `',
+    'watching path',
+    'watching extensions',
+    'to restart at any time'
+  ];
+  
+  // Vérifier si la chaîne contient des patterns de logs
+  const containsLogs = logPatterns.some(pattern => 
+    cleanedImageUrl.includes(pattern)
+  );
+  
+  // Vérifier que ce n'est pas une chaîne vide ou des logs d'erreur
+  if (!cleanedImageUrl || 
+      cleanedImageUrl.length === 0 || 
+      cleanedImageUrl.length >= 5000 || // Limite de longueur raisonnable
+      containsLogs) {
+    // Afficher seulement les premiers caractères pour le debug
+    const preview = cleanedImageUrl?.substring(0, 150) || '';
+    console.warn(`⚠️  imageUrl invalide ou contient des logs (${cleanedImageUrl?.length || 0} caractères):`, preview);
+    return null;
+  }
+  
+  // Valider que c'est une URL valide (http/https)
+  const isUrl = /^https?:\/\/.+/.test(cleanedImageUrl);
+  const isFilePath = /^[A-Za-z]:\\/.test(cleanedImageUrl) || /^\/.+/.test(cleanedImageUrl);
+  
+  if (isUrl) {
+    // URL externe valide
+    return cleanedImageUrl;
+  } else if (isFilePath) {
+    // Chemin de fichier local - ne pas l'accepter tel quel
+    console.warn("⚠️  Chemin de fichier local ignoré:", cleanedImageUrl.substring(0, 100));
+    console.warn("   💡 Solutions: 1) Uploadez le fichier via multipart/form-data (champ 'image')");
+    console.warn("                2) Utilisez une URL externe (http:// ou https://)");
+    return null;
+  } else {
+    // Format non reconnu, ignorer
+    console.warn("⚠️  Format d'imageUrl non reconnu (attendu: URL http/https):", cleanedImageUrl.substring(0, 100));
+    return null;
+  }
+};
+
+/**
+ * Détermine l'URL d'image à utiliser : priorité au fichier uploadé, sinon imageUrl du body
+ * @param {Object} req - L'objet de requête Express
+ * @param {string} imageUrlFromBody - L'URL d'image du body (optionnel)
+ * @returns {string|null} - L'URL d'image à utiliser
+ */
+const resolveImageUrl = (req, imageUrlFromBody) => {
+  if (req.file) {
+    // Si un fichier est uploadé, utiliser le chemin relatif
+    return buildRelativeImagePath(req.file.filename);
+  } else if (imageUrlFromBody !== undefined) {
+    // Nettoyer et valider l'URL d'image du body
+    return cleanAndValidateImageUrl(imageUrlFromBody);
+  }
+  return null;
+};
+
 const formatProductResponse = (productDoc, req) => {
   if (!productDoc) return null;
   const product = productDoc.toObject ? productDoc.toObject() : { ...productDoc };
@@ -143,9 +226,10 @@ export const createProduct = async (req, res) => {
   try {
     const userId = req.user._id;
     
-    // Debug: Afficher ce qui est reçu
-    console.log("req.body:", req.body);
-    console.log("req.file:", req.file);
+    // Debug: Afficher ce qui est reçu (seulement si imageUrl est présent pour éviter le bruit)
+    if (req.body?.imageUrl || req.file) {
+      console.log("📦 Création produit - imageUrl fourni:", !!req.body?.imageUrl, "fichier uploadé:", !!req.file);
+    }
     
     // Nettoyer les clés du body (enlever les deux-points et espaces en fin)
     const cleanedBody = {};
@@ -158,7 +242,7 @@ export const createProduct = async (req, res) => {
     }
     
     // Récupérer les données du body nettoyé
-    const { title, description, carat, weight, price, stock, goldPriceId } = cleanedBody;
+    const { title, description, carat, weight, price, stock, goldPriceId, imageUrl: imageUrlFromBody } = cleanedBody;
 
     // Validation des champs requis
     if (!title || !carat || !weight || !price || stock === undefined) {
@@ -207,8 +291,8 @@ export const createProduct = async (req, res) => {
       });
     }
 
-    // Gérer l'image si elle est uploadée
-    const imageUrl = req.file ? buildRelativeImagePath(req.file.filename) : null;
+    // Gérer l'image : priorité au fichier uploadé, sinon utiliser imageUrl du body
+    const imageUrl = resolveImageUrl(req, imageUrlFromBody);
 
     // Créer le produit
     const product = new Product({
@@ -306,7 +390,18 @@ export const updateProduct = async (req, res) => {
   try {
     const userId = req.user._id;
     const { productId } = req.params;
-    const { title, description, carat, weight, price, stock, goldPriceId } = req.body;
+    
+    // Nettoyer les clés du body (enlever les deux-points et espaces en fin)
+    const cleanedBody = {};
+    if (req.body) {
+      Object.keys(req.body).forEach(key => {
+        // Enlever les deux-points et espaces en fin de clé
+        const cleanKey = key.replace(/[: ]+$/, '');
+        cleanedBody[cleanKey] = req.body[key];
+      });
+    }
+    
+    const { title, description, carat, weight, price, stock, goldPriceId, imageUrl: imageUrlFromBody } = cleanedBody;
 
     // Vérifier que le produit existe et appartient au vendeur
     const product = await Product.findOne({
@@ -358,9 +453,14 @@ export const updateProduct = async (req, res) => {
     }
     if (goldPriceId !== undefined) updateData.goldPriceId = goldPriceId || null;
 
-    // Gérer l'upload d'une nouvelle image
-    if (req.file) {
-      updateData.imageUrl = buildRelativeImagePath(req.file.filename);
+    // Gérer l'image : priorité au fichier uploadé, sinon utiliser imageUrl du body
+    const resolvedImageUrl = resolveImageUrl(req, imageUrlFromBody);
+    if (resolvedImageUrl !== null) {
+      // Mettre à jour seulement si on a une valeur valide
+      updateData.imageUrl = resolvedImageUrl;
+    } else if (imageUrlFromBody === "" || imageUrlFromBody === null) {
+      // Permettre de mettre imageUrl à null explicitement
+      updateData.imageUrl = null;
     }
 
     updateData.updatedAt = new Date();
