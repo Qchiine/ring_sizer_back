@@ -8,7 +8,7 @@ const productSchema = new mongoose.Schema({
   weight: { type: Number, required: true },
   price: { type: Number, required: true },
   stock: { type: Number, default: 0, required: true },
-  imageUrl: { type: [String], required: true },
+  imageUrl: { type: String },
   sellerId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   goldPriceId: { type: mongoose.Schema.Types.ObjectId, ref: "GoldPrice" },
   createdAt: { type: Date, default: Date.now },

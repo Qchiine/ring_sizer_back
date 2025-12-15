@@ -57,33 +57,58 @@ const cleanAndValidateImageUrl = (imageUrlFromBody) => {
     cleanedImageUrl.includes(pattern)
   );
   
+  // Vérifier si c'est une data URI (data:image/...)
+  const isDataUri = /^data:image\/(jpeg|jpg|png|gif|webp|bmp);base64,/.test(cleanedImageUrl);
+  
   // Vérifier que ce n'est pas une chaîne vide ou des logs d'erreur
   if (!cleanedImageUrl || 
       cleanedImageUrl.length === 0 || 
-      cleanedImageUrl.length >= 5000 || // Limite de longueur raisonnable
       containsLogs) {
     // Afficher seulement les premiers caractères pour le debug
     const preview = cleanedImageUrl?.substring(0, 150) || '';
-    console.warn(`⚠️  imageUrl invalide ou contient des logs (${cleanedImageUrl?.length || 0} caractères):`, preview);
+    console.warn(`imageUrl invalide ou contient des logs (${cleanedImageUrl?.length || 0} caractères):`, preview);
     return null;
   }
   
-  // Valider que c'est une URL valide (http/https)
-  const isUrl = /^https?:\/\/.+/.test(cleanedImageUrl);
-  const isFilePath = /^[A-Za-z]:\\/.test(cleanedImageUrl) || /^\/.+/.test(cleanedImageUrl);
+  // Limite de longueur pour les URLs normales (pas les data URIs qui peuvent être très longues)
+  if (!isDataUri && cleanedImageUrl.length >= 5000) {
+    console.warn(`imageUrl trop long (${cleanedImageUrl.length} caractères):`, cleanedImageUrl.substring(0, 100));
+    return null;
+  }
   
-  if (isUrl) {
-    // URL externe valide
+  // Limite de longueur pour les data URIs (10MB de base64 = ~13.3MB d'image)
+  if (isDataUri && cleanedImageUrl.length > 14000000) {
+    console.warn(`Data URI trop grande (${cleanedImageUrl.length} caractères). Limite: 10MB`);
+    return null;
+  }
+  
+  // Valider que c'est une URL valide (http/https), un chemin relatif valide, ou une data URI
+  const isUrl = /^https?:\/\/.+/.test(cleanedImageUrl);
+  const isRelativePath = /^\/uploads\//.test(cleanedImageUrl); // Chemin relatif valide pour les uploads
+  const isAbsoluteLocalPath = /^[A-Za-z]:\\/.test(cleanedImageUrl); // Chemin absolu Windows (à rejeter)
+  
+  if (isDataUri) {
+    // Data URI valide (data:image/jpeg;base64,...)
     return cleanedImageUrl;
-  } else if (isFilePath) {
-    // Chemin de fichier local - ne pas l'accepter tel quel
-    console.warn("⚠️  Chemin de fichier local ignoré:", cleanedImageUrl.substring(0, 100));
-    console.warn("   💡 Solutions: 1) Uploadez le fichier via multipart/form-data (champ 'image')");
-    console.warn("                2) Utilisez une URL externe (http:// ou https://)");
+  } else if (isUrl) {
+    // URL externe valide (http/https)
+    return cleanedImageUrl;
+  } else if (isRelativePath) {
+    // Chemin relatif valide (ex: /uploads/products/...)
+    // Ce chemin sera formaté en URL absolue lors de la récupération
+    return cleanedImageUrl;
+  } else if (isAbsoluteLocalPath) {
+    // Chemin de fichier absolu local - ne pas l'accepter
+    console.warn('Chemin de fichier local absolu ignore:', cleanedImageUrl.substring(0, 100));
+    console.warn('   Solutions: 1) Uploadez le fichier via multipart/form-data (champ image)');
+    console.warn('                2) Utilisez une URL externe (http:// ou https://)');
+    console.warn('                3) Utilisez un chemin relatif commencant par /uploads/');
+    console.warn('                4) Utilisez une data URI (data:image/...;base64,...)');
     return null;
   } else {
     // Format non reconnu, ignorer
-    console.warn("⚠️  Format d'imageUrl non reconnu (attendu: URL http/https):", cleanedImageUrl.substring(0, 100));
+    console.warn("Format d'imageUrl non reconnu:", cleanedImageUrl.substring(0, 100));
+    console.warn("   Formats acceptes: URL http/https, chemin relatif /uploads/..., ou data URI");
     return null;
   }
 };
@@ -107,17 +132,63 @@ const resolveImageUrl = (req, imageUrlFromBody) => {
 
 const formatProductResponse = (productDoc, req) => {
   if (!productDoc) return null;
-  const product = productDoc.toObject ? productDoc.toObject() : { ...productDoc };
-  if (product.imageUrl) {
-    const hasAbsoluteUrl = /^https?:\/\//i.test(product.imageUrl);
-    if (!hasAbsoluteUrl) {
-      product.imageUrl = `${buildBaseUrl(req)}${product.imageUrl}`;
-    }
-    product.imageLink = product.imageUrl;
+  const productObj = productDoc.toObject ? productDoc.toObject() : { ...productDoc };
+  
+  // Créer un nouvel objet propre pour la sérialisation JSON
+  // Cela garantit que toutes les propriétés sont correctement sérialisables
+  let imageUrlValue = productObj.imageUrl;
+  
+  // Toujours utiliser une chaîne vide "" au lieu de null pour éviter les erreurs Flutter
+  // Si imageUrl est undefined, null, ou n'existe pas, on utilise une chaîne vide
+  if (imageUrlValue === undefined || imageUrlValue === null) {
+    imageUrlValue = '';
   } else {
-    product.imageLink = null;
+    // Si c'est un tableau, prendre le premier élément
+    if (Array.isArray(imageUrlValue)) {
+      imageUrlValue = imageUrlValue.length > 0 ? imageUrlValue[0] : '';
+    }
+    
+    // Convertir en chaîne si nécessaire
+    imageUrlValue = imageUrlValue ? String(imageUrlValue) : '';
+    
+    // Traiter l'URL d'image
+    if (imageUrlValue && imageUrlValue.trim() !== '') {
+      // Vérifier si c'est une data URI (ne pas la convertir)
+      const isDataUri = /^data:image\//i.test(imageUrlValue);
+      const hasAbsoluteUrl = /^https?:\/\//i.test(imageUrlValue);
+      
+      if (!isDataUri && !hasAbsoluteUrl) {
+        // Chemin relatif : le convertir en URL absolue
+        imageUrlValue = `${buildBaseUrl(req)}${imageUrlValue}`;
+      }
+      // Sinon, garder la valeur telle quelle (data URI ou URL absolue)
+    } else {
+      // Utiliser une chaîne vide au lieu de null
+      imageUrlValue = '';
+    }
   }
-  return product;
+  
+  // Créer un nouvel objet avec toutes les propriétés, garantissant imageUrl et imageLink
+  // S'assurer que tous les champs requis sont présents avec des valeurs valides
+  // Utiliser une chaîne vide "" au lieu de null pour imageUrl pour éviter les erreurs Flutter
+  const formattedProduct = {
+    _id: productObj._id,
+    title: productObj.title || '',
+    description: productObj.description || '',
+    carat: productObj.carat || 0,
+    weight: productObj.weight || 0,
+    price: productObj.price || 0,
+    stock: productObj.stock !== undefined ? productObj.stock : 0,
+    imageUrl: imageUrlValue, // Toujours une string (vide ou avec URL)
+    imageLink: imageUrlValue, // Toujours une string (vide ou avec URL)
+    sellerId: productObj.sellerId,
+    goldPriceId: productObj.goldPriceId || null,
+    createdAt: productObj.createdAt,
+    updatedAt: productObj.updatedAt,
+    __v: productObj.__v
+  };
+  
+  return formattedProduct;
 };
 
 const formatOrderResponse = (orderDoc, req) => {
@@ -226,16 +297,10 @@ export const createProduct = async (req, res) => {
   try {
     const userId = req.user._id;
     
-    // Debug: Afficher ce qui est reçu (seulement si imageUrl est présent pour éviter le bruit)
-    if (req.body?.imageUrl || req.file) {
-      console.log("📦 Création produit - imageUrl fourni:", !!req.body?.imageUrl, "fichier uploadé:", !!req.file);
-    }
-    
     // Nettoyer les clés du body (enlever les deux-points et espaces en fin)
     const cleanedBody = {};
     if (req.body) {
       Object.keys(req.body).forEach(key => {
-        // Enlever les deux-points et espaces en fin de clé
         const cleanKey = key.replace(/[: ]+$/, '');
         cleanedBody[cleanKey] = req.body[key];
       });
@@ -254,12 +319,6 @@ export const createProduct = async (req, res) => {
           weight: weight || "manquant",
           price: price || "manquant",
           stock: stock !== undefined ? stock : "manquant"
-        },
-        debug: {
-          bodyKeys: Object.keys(req.body || {}),
-          bodyValues: req.body,
-          cleanedBody: cleanedBody,
-          hasFile: !!req.file
         }
       });
     }
@@ -302,7 +361,7 @@ export const createProduct = async (req, res) => {
       weight: weightNum,
       price: priceNum,
       stock: stockNum,
-      imageUrl,
+      imageUrl: imageUrl || "", // Utiliser une chaîne vide au lieu de null
       sellerId: userId,
       goldPriceId: goldPriceId || null
     });
@@ -330,18 +389,66 @@ export const createProduct = async (req, res) => {
 export const getMyProducts = async (req, res) => {
   try {
     const userId = req.user._id;
+    console.log('GET /api/seller/products - User ID:', userId);
 
     const products = await Product.find({ sellerId: userId })
       .populate("sellerId", "name boutique")
       .populate("goldPriceId")
       .sort({ createdAt: -1 });
 
-    res.json({
-      message: "Produits récupérés avec succès",
-      count: products.length,
-      products: products.map(product => formatProductResponse(product, req))
+    console.log('Produits trouves dans la base de donnees:', products.length);
+    
+    // Formater les produits et filtrer les null (au cas où)
+    // formatProductResponse garantit déjà que imageUrl et imageLink sont toujours définis
+    const formattedProducts = products
+      .map(product => formatProductResponse(product, req))
+      .filter(product => product !== null && product !== undefined);
+    
+    // Log détaillé pour chaque produit
+    formattedProducts.forEach((product, index) => {
+      const hasImageUrlProp = product && 'imageUrl' in product;
+      const imageUrlValue = product?.imageUrl;
+      const imageUrlType = imageUrlValue === null ? 'null' : 
+                          (imageUrlValue === undefined ? 'undefined' : typeof imageUrlValue);
+      const imageUrlDisplay = imageUrlValue === null ? 'null' : 
+                             (imageUrlValue === undefined ? 'undefined' : 
+                             (typeof imageUrlValue === 'string' ? `${imageUrlValue.substring(0, 50)}...` : String(imageUrlValue)));
+      
+      console.log(`Produit ${index + 1}:`, {
+        _id: product?._id,
+        title: product?.title,
+        imageUrl: imageUrlDisplay,
+        imageUrlType: imageUrlType,
+        hasImageUrlProperty: hasImageUrlProp,
+        imageUrlValue: imageUrlValue === null ? 'null' : (imageUrlValue === undefined ? 'undefined' : 'has value')
+      });
     });
+
+    const response = {
+      message: "Produits récupérés avec succès",
+      count: formattedProducts.length,
+      products: formattedProducts
+    };
+
+    console.log('Reponse envoyee - Count:', response.count);
+    console.log('Reponse envoyee - Nombre de produits dans array:', response.products?.length || 0);
+    
+    // Log d'un produit avec imageUrl vide pour vérifier la sérialisation JSON
+    const productWithEmptyImage = formattedProducts.find(p => p && (!p.imageUrl || p.imageUrl === ''));
+    if (productWithEmptyImage) {
+      const jsonSample = JSON.stringify({
+        _id: productWithEmptyImage._id,
+        title: productWithEmptyImage.title,
+        imageUrl: productWithEmptyImage.imageUrl,
+        imageLink: productWithEmptyImage.imageLink
+      });
+      console.log('Exemple produit avec imageUrl vide (JSON):', jsonSample);
+      console.log('Type de imageUrl dans JSON:', typeof JSON.parse(jsonSample).imageUrl);
+    }
+    
+    res.json(response);
   } catch (error) {
+    console.error('ERREUR dans getMyProducts:', error);
     res.status(500).json({
       message: "Erreur lors de la récupération des produits.",
       error: error.message
