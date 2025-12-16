@@ -236,7 +236,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      order.createdAt,
+                      order.getDisplayDate(),
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey[600],
@@ -425,7 +425,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 ),
                 const SizedBox(height: 20),
                 _buildDetailRow('ID Commande', order.id),
-                _buildDetailRow('Date', order.createdAt),
+                _buildDetailRow('Date', order.getDisplayDate()),
                 _buildDetailRow('Produit', order.productTitle),
                 _buildDetailRow('Quantité', order.quantity.toString()),
                 _buildDetailRow('Prix Total', '${order.totalPrice} €'),
@@ -435,8 +435,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 10),
-                _buildDetailRow('Nom', order.buyerName),
-                _buildDetailRow('Email', order.buyerEmail),
+                _buildDetailRow('Nom', order.buyerName ?? 'N/A'),
+                _buildDetailRow('Email', order.buyerEmail ?? 'N/A'),
               ],
             ),
           );

@@ -28,7 +28,7 @@ class Order {
   factory Order.fromJson(Map<String, dynamic> json) {
     // Gérer productId qui peut être un objet (populate) ou une string
     String? productIdValue;
-    String productTitleValue;
+    String productTitleValue = 'Produit inconnu'; // Initialiser avec une valeur par défaut
     
     if (json['productId'] != null) {
       if (json['productId'] is Map) {
@@ -36,15 +36,14 @@ class Order {
         productTitleValue = json['productId']['title']?.toString() ?? 'Produit inconnu';
       } else {
         productIdValue = json['productId'].toString();
-        productTitleValue = json['productId']['title']?.toString() ?? 'Produit inconnu';
+        // Si productId n'est pas un Map, on ne peut pas extraire le titre
+        // productTitleValue garde sa valeur par défaut
       }
     } else if (json['product'] != null) {
       if (json['product'] is Map) {
         productIdValue = json['product']['_id']?.toString();
         productTitleValue = json['product']['title']?.toString() ?? 'Produit inconnu';
       }
-    } else {
-      productTitleValue = 'Produit inconnu';
     }
 
     // Gérer userId qui peut être un objet (populate) ou une string
