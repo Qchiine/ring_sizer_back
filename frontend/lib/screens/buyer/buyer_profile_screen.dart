@@ -4,6 +4,7 @@ import '../../services/api_service.dart';
 import '../../models/user.dart';
 import '../../models/measurement.dart';
 import '../common/login_screen.dart';
+import 'buyer_orders_screen.dart';
 
 class BuyerProfileScreen extends StatefulWidget {
   const BuyerProfileScreen({Key? key}) : super(key: key);
@@ -294,9 +295,10 @@ class _BuyerProfileScreenState extends State<BuyerProfileScreen> {
                     title: 'Mes commandes',
                     color: Colors.orange,
                     onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Fonctionnalité à venir!'),
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const BuyerOrdersScreen(),
                         ),
                       );
                     },

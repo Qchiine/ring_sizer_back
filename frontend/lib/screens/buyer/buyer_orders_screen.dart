@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import '../../services/api_service.dart';
-import '../../models/order.dart'; // Importer le modèle Order
+import '../../models/order.dart';
 
-class OrdersScreen extends StatefulWidget {
-  const OrdersScreen({Key? key}) : super(key: key);
+class BuyerOrdersScreen extends StatefulWidget {
+  const BuyerOrdersScreen({Key? key}) : super(key: key);
 
   @override
-  State<OrdersScreen> createState() => _OrdersScreenState();
+  State<BuyerOrdersScreen> createState() => _BuyerOrdersScreenState();
 }
 
-class _OrdersScreenState extends State<OrdersScreen> {
+class _BuyerOrdersScreenState extends State<BuyerOrdersScreen> {
   final ApiService _apiService = ApiService();
   List<Order> _orders = [];
   bool _isLoading = true;
@@ -24,9 +24,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
   Future<void> _loadOrders() async {
     setState(() => _isLoading = true);
 
-    final result = await _apiService.getSellerOrders(
-      status: _selectedFilter == 'all' ? null : _selectedFilter,
-    );
+    final result = await _apiService.getBuyerOrders();
 
     if (mounted) {
       if (result['success']) {
@@ -39,6 +37,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
           _orders = [];
           _isLoading = false;
         });
+        if (result['message'] != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message']),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
       }
     }
   }
@@ -100,6 +106,12 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     'Livrées',
                     _orders.where((o) => o.status == 'delivered').length,
                   ),
+                  const SizedBox(width: 10),
+                  _buildFilterChip(
+                    'cancelled',
+                    'Annulées',
+                    _orders.where((o) => o.status == 'cancelled').length,
+                  ),
                 ],
               ),
             ),
@@ -110,45 +122,45 @@ class _OrdersScreenState extends State<OrdersScreen> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _filteredOrders.isEmpty
-                ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.shopping_bag_outlined,
-                    size: 80,
-                    color: Colors.grey[400],
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    'Aucune commande',
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Les commandes apparaîtront ici',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[500],
-                    ),
-                  ),
-                ],
-              ),
-            )
-                : RefreshIndicator(
-              onRefresh: _loadOrders,
-              child: ListView.builder(
-                padding: const EdgeInsets.all(20),
-                itemCount: _filteredOrders.length,
-                itemBuilder: (context, index) {
-                  return _buildOrderCard(_filteredOrders[index]);
-                },
-              ),
-            ),
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.shopping_bag_outlined,
+                              size: 80,
+                              color: Colors.grey[400],
+                            ),
+                            const SizedBox(height: 20),
+                            Text(
+                              'Aucune commande',
+                              style: TextStyle(
+                                fontSize: 18,
+                                color: Colors.grey[600],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              'Les commandes apparaîtront ici',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: _loadOrders,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.all(20),
+                          itemCount: _filteredOrders.length,
+                          itemBuilder: (context, index) {
+                            return _buildOrderCard(_filteredOrders[index]);
+                          },
+                        ),
+                      ),
           ),
         ],
       ),
@@ -228,7 +240,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Commande #${order.id.substring(0, 8)}',
+                      'Commande #${order.id.length > 8 ? order.id.substring(0, 8) : order.id}',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
@@ -236,7 +248,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      order.createdAt,
+                      order.getDisplayDate(),
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey[600],
@@ -293,7 +305,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                           fontWeight: FontWeight.w600,
                           fontSize: 14,
                         ),
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 5),
@@ -324,45 +336,23 @@ class _OrdersScreenState extends State<OrdersScreen> {
             ),
             const SizedBox(height: 15),
 
-            // Actions
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      _showOrderDetails(order);
-                    },
-                    icon: const Icon(Icons.visibility, size: 18),
-                    label: const Text('Détails'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.deepPurple,
-                      side: const BorderSide(color: Colors.deepPurple),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
+            // Bouton détails
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  _showOrderDetails(order);
+                },
+                icon: const Icon(Icons.visibility, size: 18),
+                label: const Text('Voir les détails'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.deepPurple,
+                  side: const BorderSide(color: Colors.deepPurple),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: order.status != 'delivered'
-                        ? () {
-                      _updateOrderStatus(order.id, order.status);
-                    }
-                        : null,
-                    icon: const Icon(Icons.update, size: 18),
-                    label: const Text('Statut'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepPurple,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ],
         ),
@@ -380,6 +370,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
         return Colors.teal;
       case 'delivered':
         return Colors.green;
+      case 'cancelled':
+        return Colors.red;
       default:
         return Colors.grey;
     }
@@ -395,6 +387,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
         return 'Expédiée';
       case 'delivered':
         return 'Livrée';
+      case 'cancelled':
+        return 'Annulée';
       default:
         return 'Inconnu';
     }
@@ -425,18 +419,11 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 ),
                 const SizedBox(height: 20),
                 _buildDetailRow('ID Commande', order.id),
-                _buildDetailRow('Date', order.createdAt),
+                _buildDetailRow('Date', order.getDisplayDate()),
                 _buildDetailRow('Produit', order.productTitle),
                 _buildDetailRow('Quantité', order.quantity.toString()),
-                _buildDetailRow('Prix Total', '${order.totalPrice} €'),
-                const Divider(height: 30),
-                Text(
-                  'Client',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 10),
-                _buildDetailRow('Nom', order.buyerName),
-                _buildDetailRow('Email', order.buyerEmail),
+                _buildDetailRow('Prix Total', '${order.totalPrice.toStringAsFixed(2)} €'),
+                _buildDetailRow('Statut', _getStatusLabel(order.status)),
               ],
             ),
           );
@@ -458,58 +445,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
               style: const TextStyle(fontWeight: FontWeight.w600),
               textAlign: TextAlign.end,
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _updateOrderStatus(String orderId, String currentStatus) {
-    final nextStatus = {
-      'pending': 'processing',
-      'processing': 'shipped',
-      'shipped': 'delivered',
-    }[currentStatus];
-
-    if (nextStatus == null) return;
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Mettre à jour le statut'),
-        content: Text('Passer au statut "${_getStatusLabel(nextStatus)}" ?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Annuler'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              final result = await _apiService.updateOrderStatus(
-                orderId: orderId,
-                status: nextStatus,
-              );
-              if (mounted) {
-                if (result['success']) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Statut mis à jour avec succès'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                  _loadOrders(); // Recharger
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(result['message'] ?? 'Erreur lors de la mise à jour'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-              }
-            },
-            child: const Text('Confirmer'),
           ),
         ],
       ),

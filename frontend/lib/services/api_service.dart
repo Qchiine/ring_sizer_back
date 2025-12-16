@@ -251,11 +251,16 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> getMyOrders() async {
+  // Pour les vendeurs
+  Future<Map<String, dynamic>> getSellerOrders({String? status}) async {
     try {
       final headers = await getHeaders();
+      String url = '$baseUrl/seller/orders';
+      if (status != null && status.isNotEmpty && status != 'all') {
+        url += '?status=$status';
+      }
       final response = await http.get(
-        Uri.parse('$baseUrl/seller/orders'),
+        Uri.parse(url),
         headers: headers,
       );
       if (response.statusCode == 200) {
@@ -266,6 +271,79 @@ class ApiService {
         return {'success': true, 'orders': orders};
       } else {
         return {'success': false, 'message': 'Erreur de chargement des commandes'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Erreur: $e'};
+    }
+  }
+
+  // Pour les acheteurs - créer une commande
+  Future<Map<String, dynamic>> createOrder({
+    required String productId,
+    required int quantity,
+  }) async {
+    try {
+      final headers = await getHeaders();
+      final response = await http.post(
+        Uri.parse('$baseUrl/profile/orders'),
+        headers: headers,
+        body: jsonEncode({
+          'productId': productId,
+          'quantity': quantity,
+        }),
+      );
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 201) {
+        return {'success': true, 'data': data, 'order': Order.fromJson(data['order'])};
+      } else {
+        return {'success': false, 'message': data['message'] ?? 'Erreur lors de la création de la commande'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Erreur: $e'};
+    }
+  }
+
+  // Pour les acheteurs - voir leurs commandes
+  Future<Map<String, dynamic>> getBuyerOrders() async {
+    try {
+      final headers = await getHeaders();
+      final response = await http.get(
+        Uri.parse('$baseUrl/profile/orders'),
+        headers: headers,
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List<Order> orders = (data['orders'] as List)
+            .map((json) => Order.fromJson(json))
+            .toList();
+        return {'success': true, 'orders': orders};
+      } else {
+        return {'success': false, 'message': 'Erreur de chargement des commandes'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Erreur: $e'};
+    }
+  }
+
+  // Pour les vendeurs - mettre à jour le statut d'une commande
+  Future<Map<String, dynamic>> updateOrderStatus({
+    required String orderId,
+    required String status,
+  }) async {
+    try {
+      final headers = await getHeaders();
+      final response = await http.patch(
+        Uri.parse('$baseUrl/seller/orders/$orderId/status'),
+        headers: headers,
+        body: jsonEncode({
+          'status': status,
+        }),
+      );
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {'success': true, 'data': data, 'order': Order.fromJson(data['order'])};
+      } else {
+        return {'success': false, 'message': data['message'] ?? 'Erreur lors de la mise à jour'};
       }
     } catch (e) {
       return {'success': false, 'message': 'Erreur: $e'};
@@ -322,5 +400,10 @@ class ApiService {
     } catch (e) {
       return {'success': false, 'message': 'Erreur: $e'};
     }
+  }
+
+  // Alias pour compatibilité avec le code existant (seller orders)
+  Future<Map<String, dynamic>> getMyOrders() async {
+    return getSellerOrders();
   }
 }

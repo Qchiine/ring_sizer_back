@@ -690,18 +690,25 @@ export const updateStock = async (req, res) => {
 // GESTION DES COMMANDES
 // ============================================
 
-// Récupérer toutes les commandes des produits du vendeur
+// Récupérer toutes les commandes des produits du vendeur (avec filtre optionnel par statut)
 export const getMyOrders = async (req, res) => {
   try {
     const userId = req.user._id;
+    const { status } = req.query; // Filtre optionnel par statut (ex: ?status=pending)
 
     // Récupérer tous les produits du vendeur
     const myProducts = await Product.find({ sellerId: userId }).select("_id");
 
     const productIds = myProducts.map(p => p._id);
 
+    // Construire le filtre
+    const filter = { productId: { $in: productIds } };
+    if (status) {
+      filter.status = status; // Filtrer par statut si fourni
+    }
+
     // Récupérer toutes les commandes pour ces produits
-    const orders = await Order.find({ productId: { $in: productIds } })
+    const orders = await Order.find(filter)
       .populate("userId", "name email")
       .populate("productId")
       .sort({ date: -1 });
@@ -761,7 +768,7 @@ export const getOrderById = async (req, res) => {
   }
 };
 
-// Mettre à jour le statut d'une commande
+// Mettre à jour le statut d'une commande (valider, annuler, etc.)
 export const updateOrderStatus = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -791,6 +798,23 @@ export const updateOrderStatus = async (req, res) => {
       return res.status(403).json({
         message: "Vous n'avez pas l'autorisation de modifier cette commande."
       });
+    }
+
+    // Si on annule une commande qui était en cours, restaurer le stock
+    if (status === "cancelled" && order.status !== "cancelled" && order.status !== "delivered") {
+      product.stock += order.quantity;
+      await product.save();
+    }
+
+    // Si on valide une commande annulée précédemment, retirer à nouveau le stock
+    if (status !== "cancelled" && order.status === "cancelled") {
+      if (product.stock < order.quantity) {
+        return res.status(400).json({
+          message: `Stock insuffisant pour valider cette commande. Stock disponible: ${product.stock}, quantité: ${order.quantity}.`
+        });
+      }
+      product.stock -= order.quantity;
+      await product.save();
     }
 
     // Mettre à jour le statut
